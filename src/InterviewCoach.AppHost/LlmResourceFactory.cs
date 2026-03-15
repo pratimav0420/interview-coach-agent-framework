@@ -143,32 +143,43 @@ public static class LlmResourceFactory
     {
         var foundry = config.GetSection(SECTION_NAME_MICROSOFT_FOUNDRY);
         var endpoint = foundry[ENDPOINT_KEY] ?? throw new InvalidOperationException($"Missing configuration: {SECTION_NAME_MICROSOFT_FOUNDRY}:{ENDPOINT_KEY}");
-        var accessKey = foundry[API_KEY_KEY] ?? throw new InvalidOperationException($"Missing configuration: {SECTION_NAME_MICROSOFT_FOUNDRY}:{API_KEY_KEY}");
+        var accessKey = foundry[API_KEY_KEY];
         var deploymentName = foundry[DEPLOYMENT_NAME_KEY] ?? throw new InvalidOperationException($"Missing configuration: {SECTION_NAME_MICROSOFT_FOUNDRY}:{DEPLOYMENT_NAME_KEY}");
+        var openAiEndpoint = $"{string.Join("://", endpoint.Split([':', '/'], StringSplitOptions.RemoveEmptyEntries).Take(2))}/openai/v1/";
+
+        var useApiKey = !string.IsNullOrEmpty(accessKey);
 
         Console.WriteLine();
         Console.WriteLine($"\tLLM Provider: {provider}");
         Console.WriteLine($"\tModel: {deploymentName}");
         Console.WriteLine($"\tAgent Mode: {mode}");
+        Console.WriteLine($"\tAuth: {(useApiKey ? "API Key" : "DefaultAzureCredential")}");
         Console.WriteLine();
 
-        var apiKey = source.ApplicationBuilder
-                           .AddParameter(name: API_KEY_RESOURCE_NAME, value: accessKey, secret: true);
-        var chat = source.ApplicationBuilder
-                        //  .AddConnectionString(
-                        //      LLM_PROJECT_NAME,
-                        //     //  ReferenceExpression.Create($"Endpoint:{endpoint};Key={accessKey};Model={deploymentName}"));
-                        //     //  ReferenceExpression.Create($"Endpoint={string.Join("://", endpoint.Split([':', '/'], StringSplitOptions.RemoveEmptyEntries).Take(2))}/openai/v1/;Model={deploymentName}"));
-                        //     //  ReferenceExpression.Create($"Endpoint={string.Join("://", endpoint.Split([':', '/'], StringSplitOptions.RemoveEmptyEntries).Take(2))}/openai/v1/;Key={accessKey};Model={deploymentName}"));
-                         .AddOpenAI(LLM_PROJECT_NAME)
-                         .WithEndpoint($"{string.Join("://", endpoint.Split([':', '/'], StringSplitOptions.RemoveEmptyEntries).Take(2))}/openai/v1/")
-                         .WithApiKey(apiKey)
-                         .AddModel(name: LLM_RESOURCE_NAME, model: deploymentName);
+        if (useApiKey)
+        {
+            var apiKey = source.ApplicationBuilder
+                               .AddParameter(name: API_KEY_RESOURCE_NAME, value: accessKey!, secret: true);
+            var chat = source.ApplicationBuilder
+                             .AddOpenAI(LLM_PROJECT_NAME)
+                             .WithEndpoint(openAiEndpoint)
+                             .WithApiKey(apiKey)
+                             .AddModel(name: LLM_RESOURCE_NAME, model: deploymentName);
 
-        return source.WithEnvironment(AGENT_MODE_KEY, mode.ToString())
-                     .WithEnvironment(LLM_PROVIDER_KEY, provider.ToString())
-                     .WithReference(chat)
-                     .WaitFor(chat);
+            return source.WithEnvironment(AGENT_MODE_KEY, mode.ToString())
+                         .WithEnvironment(LLM_PROVIDER_KEY, provider.ToString())
+                         .WithReference(chat)
+                         .WaitFor(chat);
+        }
+        else
+        {
+            // Use DefaultAzureCredential - pass the raw endpoint and model as env vars
+            var baseEndpoint = $"{string.Join("://", endpoint.Split([':', '/'], StringSplitOptions.RemoveEmptyEntries).Take(2))}";
+            return source.WithEnvironment(AGENT_MODE_KEY, mode.ToString())
+                         .WithEnvironment(LLM_PROVIDER_KEY, provider.ToString())
+                         .WithEnvironment("FOUNDRY_ENDPOINT", baseEndpoint)
+                         .WithEnvironment("FOUNDRY_MODEL", deploymentName);
+        }
     }
 
     private static IResourceBuilder<ProjectResource> AddGitHubCopilotResource(this IResourceBuilder<ProjectResource> source, IConfiguration config, LlmProvider provider, AgentMode mode)

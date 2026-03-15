@@ -84,20 +84,24 @@ if (config[Constants.LlmProvider] != "MicrosoftFoundry")
 }
 else
 {
-    builder.AddOpenAIClient("chat")
-           .AddChatClient();
+    var foundryEndpoint = config["FOUNDRY_ENDPOINT"];
+    var foundryModel = config["FOUNDRY_MODEL"];
 
-    // var connection = new DbConnectionStringBuilder() { ConnectionString = config.GetConnectionString("foundry") };
-    // var endpoint = connection.TryGetValue("Endpoint", out var endpointValue) ? endpointValue?.ToString() : throw new InvalidOperationException("Missing Foundry Endpoint");
-    // // var accessKey = connection.TryGetValue("Key", out var accessKeyValue) ? accessKeyValue?.ToString() : throw new InvalidOperationException("Missing Foundry Key");
-    // var model = connection.TryGetValue("Model", out var modelValue) ? modelValue?.ToString() : throw new InvalidOperationException("Missing Foundry Model");
-    // var options = new OpenAIClientOptions() { Endpoint = new Uri(endpoint!) };
-    // var credential = new DefaultAzureCredential();
-    // var client = new OpenAIClient(new BearerTokenPolicy(credential, "https://ai.azure.com/.default"), options)
-    //                 .GetResponsesClient(model!)
-    //                 .AsIChatClient();
-
-    // builder.Services.AddSingleton<IChatClient>(client);
+    if (!string.IsNullOrEmpty(foundryEndpoint) && !string.IsNullOrEmpty(foundryModel))
+    {
+        // No API key available - use DefaultAzureCredential (Entra ID auth)
+        var credential = new Azure.Identity.DefaultAzureCredential();
+        var azureClient = new Azure.AI.OpenAI.AzureOpenAIClient(
+            new Uri(foundryEndpoint),
+            credential);
+        builder.Services.AddChatClient(azureClient.GetChatClient(foundryModel).AsIChatClient());
+    }
+    else
+    {
+        // API key path - Aspire provides the connection via AddOpenAIClient
+        builder.AddOpenAIClient("chat")
+               .AddChatClient();
+    }
 }
 
 builder.AddAIAgent("coach");

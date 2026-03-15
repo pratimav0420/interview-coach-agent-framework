@@ -12,16 +12,16 @@ param tags object = {}
 param sku string = 'S0'
 
 @description('Disallow key-based authentication for the Azure OpenAI resource. Should be disabled in production environments in favor of managed identities')
-param disableLocalAuth bool = true
+param disableLocalAuth bool = false
 
 @description('Deploy GPT model automatically')
 param deployGptModel bool = true
 
 @description('GPT model to deploy')
-param gptModelName string = 'gpt-5-mini'
+param gptModelName string = 'gpt-4.1'
 
 @description('GPT model version')
-param gptModelVersion string = '2025-08-07'
+param gptModelVersion string = '2025-04-14'
 
 @description('GPT deployment capacity')
 param gptCapacity int = 10
